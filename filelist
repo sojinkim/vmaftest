@@ -1,0 +1,17 @@
+{
+"testset": [
+    {
+        "ref": "Tennis_24fps.yuv",
+        "refpath": "/home/inisoft/nfs/ref/",
+        "pixfmt" : "yuv420p",
+        "res": "1920 1080",
+        "dis":[
+             "Tennis_20_288_375.yuv",
+             "Tennis_40_384_750.yuv",
+             "Tennis_60_480_1050.yuv",
+             "Tennis_90_1080_4300.yuv" 
+        ],
+        "dispath": "/home/inisoft/nfs/dis/"
+    }
+]
+}
