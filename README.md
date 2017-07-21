@@ -7,7 +7,7 @@
 - vmaf install : https://github.com/Netflix/vmaf
 
 ### python packages used : 
-- dill, pickle, csv, matplotlib, simplejson, pexpect 
+- dill, pickle, csv, matplotlib, simplejson, pexpect, pika 
 
 
 
@@ -30,23 +30,13 @@
 - $ python report.py [pkl file name]
 
 
-
-## ps. celery/ rabbitmq test
-- worker.py : fake worker
-- sender.py : send one task, wait till finish, print result
-
-1. install celery & rabbitmq
-- http://docs.celeryproject.org/en/latest/getting-started/first-steps-with-celery.html#installing-celery
-
-2. env setting
-- $ sudo rabbitmqctl add_user myuser mypassword
-- $ sudo rabbitmqctl add_vhost myvhost
-- $ sudo rabbitmqctl set_user_tags myuser mytag
-- $ sudo rabbitmqctl set_permissions -p myvhost myuser ".*" ".*" ".*"
-
-3. run worker
-- $ celery -A worker worker --loglevel=info
-
-4. On another termianl or remote server, execute sender.py. Both server should have celery/rabbitmq installed.  
-- $ python sender.py
-
+## run in rpc mode
+1. rabbitmq must be installed
+2. 'localhost' host name should be changed to run across different machines. 
+- worker.py, rpc_sender.py
+3. set the var to be true.
+- gvar.py : g_rpc = True
+4. run worker
+- $ python worker.py
+5. run test
+- $ python runtest.py 

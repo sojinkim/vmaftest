@@ -7,9 +7,9 @@ def main():
     for test in testset:
         test.convertSrc2Yuv()
         test.generateTestSet()
-        print 'encoding failed', test.encode_failed 
+        print 'encoding failed', test.testresult.encode_failed 
         test.calculateVmaf()
-        print 'vmaf failed', test.vmaf_failed
+        print 'vmaf failed', test.testresult.vmaf_failed
 
 
 if __name__ == "__main__":

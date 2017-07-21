@@ -2,7 +2,7 @@ import simplejson as json
 import dill, pickle
 import os, sys, pexpect
 from collections import defaultdict
-from vmaftest import run_vmaf
+from worker import run_vmaf
 from gvars import *
 
 def getResultFile(ref):

@@ -2,27 +2,12 @@ import dill, pickle, os
 import sys, pexpect
 from collections import defaultdict
 from gvars import *
-
-def run_encode(cmd1, cmd2):
-    print cmd1
-    print cmd2
-    ret1 = os.system(cmd1)
-    ret2 = os.system(cmd2)
-    return ret1 or ret2
-
-def run_vmaf(cmd):
-    print cmd
-    p = pexpect.spawn(cmd)
-    p.timeout = None
-    p.maxsize = 1
-    for line in p: pass
-    p.close()
-
-    if p.exitstatus == 0:
-        score = float(line.split(':')[-1])  # vmaf score
-    else:
-        score = 0.0
-    return score, p.exitstatus
+from testresult import TestResult
+if g_rpc:
+    from rpc_sender import Sender
+    from threading import Thread
+else:
+    from worker import run_encode, run_vmaf
 
 
 class SourceVideo:
@@ -36,6 +21,7 @@ class SourceVideo:
 
 
 class VmafTest:
+
     def __init__(self, name, srcVideo, targetVideos, src_path, target_path, result_path):
         self.name = name
         self.src = srcVideo # class SourceVideo
@@ -50,10 +36,11 @@ class VmafTest:
         self.target_path = target_path
         self.result_path = result_path
 
-        self.encode_failed = []
-        self.vmaf_failed = []
-
+        self.result = None
         self._init_result()
+
+        self.testresult = TestResult()
+        self.testresult.init_once(self.result)
 
 
     def _init_result(self):
@@ -78,7 +65,6 @@ class VmafTest:
         pkl_file = open(self._getResultFile(), 'wb')
         pickle.dump(self.result, pkl_file)
         pkl_file.close()
-        print self.result
 
         
     def _composeTargetVideoName(self, height, bitrate):
@@ -136,6 +122,7 @@ class VmafTest:
 
     def generateTestSet(self):
         result = self.result
+        threads = []
 
         for key, value in result.iteritems():
             for i in value.keys():
@@ -144,9 +131,19 @@ class VmafTest:
                 if (not os.path.exists(self._getTargetMp4File(height, bitrate))) \
                    or self.encoding_overwrite:
                     cmd1, cmd2 = self._ffmpeg_cmds(height, bitrate)
-                    ret = run_encode(cmd1, cmd2)
-                    if ret != 0:
-                        self.encode_failed.append(height + '_' + bitrate)
+                    
+                    if g_rpc: 
+                        cmds = cmd1 + ';' + cmd2
+                        t = Thread(target=Sender(self.testresult).remote_ffmpeg, args=(cmds, height, bitrate))
+                        threads += [t]
+                        t.start()
+                        t.join()
+                    else:
+                        ret = run_encode(cmd1, cmd2)
+                        if ret != 0:
+                            self.testresult.encode_failed.append(height + '_' + bitrate)
+
+        print '##ffmpeg', self.result
 
 
     def _vmaf_cmd(self, height, bitrate):
@@ -160,24 +157,31 @@ class VmafTest:
         src = self.src
         runall = self.vmaf_runall
         result = self.result
+        threads = []
 
         # run vmaf through testset
         for key, value in result.iteritems():
             for i in value.keys():
                 if runall or result[key][i][1] == 0.0:
                     cmd = self._vmaf_cmd(key, i)
-                
-                    score, exitcode = run_vmaf(cmd)
-                    if exitcode != 0:
-                        self.vmaf_failed.append(key + '_' + i)
                     
-                    print key, i, score, exitcode
-                    result[key][i][1] = score
+                    if g_rpc: 
+                        t = Thread(target=Sender(self.testresult).remote_vmaf, args=(cmd, key, i))
+                        threads += [t]
+                        t.start()
+                        t.join()
+                    else: 
+                        score, exitcode = run_vmaf(cmd)
+                        if exitcode != 0:
+                            self.testresult.vmaf_failed.append(key + '_' + i)
+                    
+                        print key, i, score, exitcode
+                        result[key][i][1] = score
 
         # store the updated dictionay back to the file
         pkl_file = open(self._getResultFile(), 'wb')
         pickle.dump(result, pkl_file)
         pkl_file.close()
-        print result
+        print '##vmaf', self.result
         
 
