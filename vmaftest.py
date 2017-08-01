@@ -2,7 +2,7 @@ import dill, pickle, os
 import sys, pexpect
 from collections import defaultdict
 from gvars import *
-from testresult import TestResult
+from Queue import Queue
 if g_rpc:
     from rpc_sender import Sender
     from threading import Thread
@@ -39,9 +39,11 @@ class VmafTest:
         self.result = None
         self._init_result()
 
-        self.testresult = TestResult()
-        self.testresult.init_once(self.result)
+        self.rpc_resultqueue = Queue(maxsize=0)
+        self.failedqueue = Queue(maxsize=0)
 
+        self.encoding_failed = []
+        self.vmaf_failed = []
 
     def _init_result(self):
         if os.path.exists(self._getResultFile()):
@@ -134,16 +136,17 @@ class VmafTest:
                     
                     if g_rpc: 
                         cmds = cmd1 + ';' + cmd2
-                        t = Thread(target=Sender(self.testresult).remote_ffmpeg, args=(cmds, height, bitrate))
+                        t = Thread(target=Sender().remote_ffmpeg, args=(cmds, height, bitrate, self.rpc_resultqueue, self.failedqueue))
                         threads += [t]
                         t.start()
                         t.join()
                     else:
                         ret = run_encode(cmd1, cmd2)
                         if ret != 0:
-                            self.testresult.encode_failed.append(height + '_' + bitrate)
+                            self.failedqueue.put(height + '_' + bitrate)
 
-        print '##ffmpeg', self.result
+        while not self.failedqueue.empty():
+            self.encoding_failed.append(self.failedqueue.get())
 
 
     def _vmaf_cmd(self, height, bitrate):
@@ -166,22 +169,32 @@ class VmafTest:
                     cmd = self._vmaf_cmd(key, i)
                     
                     if g_rpc: 
-                        t = Thread(target=Sender(self.testresult).remote_vmaf, args=(cmd, key, i))
+                        t = Thread(target=Sender().remote_vmaf, args=(cmd, key, i, self.rpc_resultqueue, self.failedqueue))
                         threads += [t]
                         t.start()
                         t.join()
+                       
                     else: 
                         score, exitcode = run_vmaf(cmd)
                         if exitcode != 0:
-                            self.testresult.vmaf_failed.append(key + '_' + i)
+                            self.failedqueue.put(key + '_' + i)
                     
                         print key, i, score, exitcode
                         result[key][i][1] = score
+        if g_rpc:
+            self._update_result()
 
         # store the updated dictionay back to the file
         pkl_file = open(self._getResultFile(), 'wb')
         pickle.dump(result, pkl_file)
         pkl_file.close()
-        print '##vmaf', self.result
         
+        while not self.failedqueue.empty():
+            self.vmaf_failed.append(self.failedqueue.get())
+
+
+    def _update_result(self):
+        while not self.rpc_resultqueue.empty():
+            height, bitrate, score = self.rpc_resultqueue.get()
+            self.result[height][bitrate][1] = score
 

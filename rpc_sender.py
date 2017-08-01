@@ -2,12 +2,12 @@ import pika
 import sys
 import threading 
 from threading import Thread
-from testresult import TestResult
 
 class Sender():
 
-    def __init__(self, testresult):
+    def __init__(self):
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+        
         self.channel = self.connection.channel()
 
         result = self.channel.queue_declare(exclusive=True)
@@ -16,7 +16,6 @@ class Sender():
         self.channel.basic_consume(self.on_response, no_ack=True, queue=self.callback_queue)
         self.corr_id = None
 
-        self.testresult = testresult
 
     def on_response(self, ch, method, props, body):
         if self.corr_id == props.correlation_id:
@@ -25,7 +24,7 @@ class Sender():
         self.connection.close()
 
 
-    def remote_ffmpeg(self, msg, height, bitrate):
+    def remote_ffmpeg(self, msg, height, bitrate, rq, fq):
 
         self.response = None
         self.corr_id = str(height) + ';' + str(bitrate)
@@ -41,11 +40,12 @@ class Sender():
             self.connection.process_data_events()
 
         print 'ffmpeg response', self.corr_id, self.response
+
         if self.response != '0':
-            self.testresult.add_encode_failure(height, bitrate)
+            fq.put(height + '_' + bitrate)
 
 
-    def remote_vmaf(self, msg, height, bitrate):
+    def remote_vmaf(self, msg, height, bitrate, rq, fq):
 
         self.response = None
         self.corr_id = str(height) + ';' + str(bitrate)
@@ -64,10 +64,9 @@ class Sender():
         print 'vmaf response', self.corr_id, self.response
 
         if exitcode != '0':
-            self.testresult.add_vmaf_failure(height, bitrate)
-
-        self.testresult.update_score(height, bitrate, score)
-
+            fq.put(height + '_' + bitrate)
+        else:
+            rq.put([height, bitrate, score])
 
 
 
